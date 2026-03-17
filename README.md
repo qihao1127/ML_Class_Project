@@ -1,5 +1,9 @@
 # Advance Machine Learning Class Project Qihao Yang
 
+## Introduction
+
+This project explores baseline machine learning models for text classification on the IMDB dataset. The goal is to evaluate and compare simple models such as Logistic Regression and Naive Bayes.
+
 ## How to Run
 ```bash
 pip install -r requirements.txt
