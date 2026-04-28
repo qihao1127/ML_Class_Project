@@ -91,15 +91,9 @@ cnn_results = load_csv(
     os.path.join(RESULTS_DIR, "cnn_results_subset_2000.csv")
 )
 
-# BERT file is still named bert_results.csv in your current code
-bert_results_path = os.path.join(RESULTS_DIR, "bert_results_subset_2000.csv")
-
-if os.path.exists(bert_results_path):
-    bert_results = load_csv(bert_results_path)
-else:
-    bert_results = load_csv(
-        os.path.join(RESULTS_DIR, "bert_results.csv")
-    )
+bert_results = load_csv(
+    os.path.join(RESULTS_DIR, "bert_results_subset_2000.csv")
+)
 
 all_results = pd.concat(
     [
@@ -181,7 +175,7 @@ prediction_files = {
     ),
     "DistilBERT": os.path.join(
         RESULTS_DIR,
-        "bert_predictions_distilbert_fine_tuned_test.csv",
+        "bert_predictions_distilbert_fine_tuned_subset_2000_test.csv",
     ),
 }
 

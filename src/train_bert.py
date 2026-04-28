@@ -261,7 +261,7 @@ for split_name, texts, labels, eval_dataset in [
         preds=preds,
         output_path=os.path.join(
             RESULTS_DIR,
-            f"bert_predictions_distilbert_fine_tuned_{split_name}.csv",
+            f"bert_predictions_distilbert_fine_tuned_subset_2000_{split_name}.csv",
         ),
     )
 
@@ -271,7 +271,7 @@ for split_name, texts, labels, eval_dataset in [
         split_name=split_name,
         output_path=os.path.join(
             FIGURES_DIR,
-            f"bert_confusion_matrix_distilbert_fine_tuned_{split_name}.png",
+            f"bert_confusion_matrix_distilbert_fine_tuned_subset_2000_{split_name}.png",
         ),
     )
 
@@ -281,7 +281,16 @@ for split_name, texts, labels, eval_dataset in [
 # =========================
 
 results_df = pd.DataFrame(all_results)
-results_path = os.path.join(RESULTS_DIR, "bert_results.csv")
+if USE_SUBSET:
+    results_path = os.path.join(
+        RESULTS_DIR,
+        "bert_results_subset_2000.csv",
+    )
+else:
+    results_path = os.path.join(
+        RESULTS_DIR,
+        "bert_results.csv",
+    )
 results_df.to_csv(results_path, index=False)
 
 print("\nBERT results:")
