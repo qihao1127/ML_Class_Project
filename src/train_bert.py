@@ -1,27 +1,6 @@
-"""
-train_bert.py
-
-DistilBERT fine-tuning experiment for IMDb sentiment classification.(Using DistilBERT fine-tuning for speed)
-
-Model:
-- DistilBERT fine-tuned on IMDb sentiment classification
-
-Outputs:
-- results/bert_results.csv
-- results/bert_predictions_distilbert_fine_tuned_lr_2e_5_epochs_2_validation.csv
-- results/bert_predictions_distilbert_fine_tuned_lr_2e_5_epochs_2_test.csv
-- figures/confusion_matrix_bert_distilbert_fine_tuned_lr_2e_5_epochs_2_validation.png
-- figures/confusion_matrix_bert_distilbert_fine_tuned_lr_2e_5_epochs_2_test.png
-- models/distilbert_fine_tuned_lr_2e_5_epochs_2/
-"""
-
 import os
-import random
-import inspect
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
 import torch
 
 from datasets import load_dataset
@@ -32,365 +11,279 @@ from transformers import (
     TrainingArguments,
 )
 
-from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-    classification_report,
+from utils import (
+    set_seed,
+    make_dirs,
+    evaluate_predictions,
+    save_predictions,
+    save_confusion_matrix,
 )
 
-# 0. Basic Setup
+
+# =========================
+# 0. Settings
+# =========================
 
 SEED = 42
 
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-
-if torch.cuda.is_available():
-    torch.cuda.manual_seed_all(SEED)
-
-RESULTS_DIR = "results"
+RESULTS_DIR = "Results"
 FIGURES_DIR = "figures"
 MODELS_DIR = "models"
 
-os.makedirs(RESULTS_DIR, exist_ok=True)
-os.makedirs(FIGURES_DIR, exist_ok=True)
-os.makedirs(MODELS_DIR, exist_ok=True)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
-
-if device.type == "cuda":
-    print(f"GPU: {torch.cuda.get_device_name(0)}")
-else:
-    print("Running on CPU. DistilBERT + subset mode is used for feasibility.")
-
-
-# 1. Experiment Settings
-
 MODEL_NAME = "distilbert-base-uncased"
 
-MAX_LENGTH = 128
-BATCH_SIZE = 16
-
+# Setup for speed
 USE_SUBSET = True
-SUBSET_TRAIN_SIZE = 5000
-SUBSET_TEST_SIZE = 5000
+SUBSET_TRAIN_SIZE = 2000
+SUBSET_VAL_SIZE = 500
+SUBSET_TEST_SIZE = 1000
 
-EXPERIMENT_NAME = "DistilBERT Fine Tuned LR 2e-5 Epochs 2"
-LEARNING_RATE = 2e-5
+MAX_LENGTH = 128
 NUM_EPOCHS = 2
+BATCH_SIZE = 8
+LEARNING_RATE = 2e-5
+set_seed(SEED)
+make_dirs(RESULTS_DIR, FIGURES_DIR, MODELS_DIR)
+
+print("CUDA available:", torch.cuda.is_available())
 
 
-# 2. Helper Functions
-
-def safe_name(name):
-    return (
-        name.lower()
-        .replace(" ", "_")
-        .replace("-", "_")
-        .replace("=", "")
-        .replace(".", "")
-    )
-
-
-def compute_metrics(eval_pred):
-    logits, labels = eval_pred
-    preds = np.argmax(logits, axis=-1)
-
-    return {
-        "accuracy": accuracy_score(labels, preds),
-        "macro_f1": f1_score(labels, preds, average="macro"),
-    }
-
-
-def build_training_args(output_dir):
-    """
-    Handles different transformers versions.
-    Some versions use eval_strategy, older versions use evaluation_strategy.
-    """
-
-    params = inspect.signature(TrainingArguments.__init__).parameters
-
-    args_dict = {
-        "output_dir": output_dir,
-        "learning_rate": LEARNING_RATE,
-        "per_device_train_batch_size": BATCH_SIZE,
-        "per_device_eval_batch_size": BATCH_SIZE,
-        "num_train_epochs": NUM_EPOCHS,
-        "weight_decay": 0.01,
-        "logging_steps": 50,
-        "report_to": "none",
-        "seed": SEED,
-        "fp16": torch.cuda.is_available(),
-        "save_total_limit": 1,
-        "save_strategy": "epoch",
-        "load_best_model_at_end": True,
-        "metric_for_best_model": "macro_f1",
-        "greater_is_better": True,
-    }
-
-    if "eval_strategy" in params:
-        args_dict["eval_strategy"] = "epoch"
-    else:
-        args_dict["evaluation_strategy"] = "epoch"
-
-    return TrainingArguments(**args_dict)
-
-
-def save_predictions(texts, labels, preds, experiment_name, split_name):
-    pred_df = pd.DataFrame({
-        "text": texts,
-        "true_label": labels,
-        "predicted_label": preds,
-        "correct": np.array(labels) == np.array(preds),
-    })
-
-    file_name = f"bert_predictions_{safe_name(experiment_name)}_{split_name}.csv"
-    pred_path = os.path.join(RESULTS_DIR, file_name)
-
-    pred_df.to_csv(pred_path, index=False)
-    print(f"Saved predictions to {pred_path}")
-
-
-def save_confusion_matrix(cm, experiment_name, split_name):
-    disp = ConfusionMatrixDisplay(
-        confusion_matrix=cm,
-        display_labels=["negative", "positive"],
-    )
-
-    fig, ax = plt.subplots(figsize=(6, 5))
-    disp.plot(ax=ax, values_format="d")
-    ax.set_title(f"{experiment_name} Confusion Matrix ({split_name})")
-    plt.tight_layout()
-
-    file_name = f"confusion_matrix_bert_{safe_name(experiment_name)}_{split_name}.png"
-    fig_path = os.path.join(FIGURES_DIR, file_name)
-
-    plt.savefig(fig_path, dpi=300)
-    plt.close()
-
-    print(f"Saved confusion matrix to {fig_path}")
-
-
-def evaluate_and_save(trainer, tokenized_dataset, raw_texts, labels, experiment_name, split_name):
-    print("\n" + "=" * 60)
-    print(f"Evaluating {experiment_name} on {split_name} set")
-    print("=" * 60)
-
-    prediction_output = trainer.predict(tokenized_dataset)
-    logits = prediction_output.predictions
-    preds = np.argmax(logits, axis=-1)
-
-    acc = accuracy_score(labels, preds)
-    macro_f1 = f1_score(labels, preds, average="macro")
-    cm = confusion_matrix(labels, preds)
-
-    print(f"Accuracy: {acc:.4f}")
-    print(f"Macro-F1: {macro_f1:.4f}")
-
-    print("\nClassification report:")
-    print(
-        classification_report(
-            labels,
-            preds,
-            target_names=["negative", "positive"],
-            digits=4,
-        )
-    )
-
-    save_predictions(
-        texts=raw_texts,
-        labels=labels,
-        preds=preds,
-        experiment_name=experiment_name,
-        split_name=split_name,
-    )
-
-    save_confusion_matrix(
-        cm=cm,
-        experiment_name=experiment_name,
-        split_name=split_name,
-    )
-
-    return {
-        "model": experiment_name,
-        "base_model": MODEL_NAME,
-        "split": split_name,
-        "train_subset_size": SUBSET_TRAIN_SIZE if USE_SUBSET else "full",
-        "test_subset_size": SUBSET_TEST_SIZE if USE_SUBSET else "full",
-        "max_length": MAX_LENGTH,
-        "batch_size": BATCH_SIZE,
-        "epochs": NUM_EPOCHS,
-        "learning_rate": LEARNING_RATE,
-        "accuracy": acc,
-        "macro_f1": macro_f1,
-        "true_negative": cm[0, 0],
-        "false_positive": cm[0, 1],
-        "false_negative": cm[1, 0],
-        "true_positive": cm[1, 1],
-    }
-
-
-# 3. Load IMDb Dataset
+# =========================
+# 1. Load IMDb Dataset
+# =========================
 
 print("Loading IMDb dataset...")
 dataset = load_dataset("imdb")
 
+# Shuffle first to avoid taking only one class
+train_data = dataset["train"].shuffle(seed=SEED)
+test_data = dataset["test"].shuffle(seed=SEED)
+
 if USE_SUBSET:
-    print(f"Using subset: train={SUBSET_TRAIN_SIZE}, test={SUBSET_TEST_SIZE}")
-    dataset["train"] = dataset["train"].shuffle(seed=SEED).select(range(SUBSET_TRAIN_SIZE))
-    dataset["test"] = dataset["test"].shuffle(seed=SEED).select(range(SUBSET_TEST_SIZE))
+    train_subset = train_data.select(range(SUBSET_TRAIN_SIZE + SUBSET_VAL_SIZE))
+    test_subset = test_data.select(range(SUBSET_TEST_SIZE))
+else:
+    train_subset = train_data
+    test_subset = test_data
 
-# 4. Train / Validation / Test Split
+# Convert to list[str] explicitly for tokenizer
+train_texts = [
+    str(x) for x in train_subset["text"][:SUBSET_TRAIN_SIZE]
+]
+train_labels = list(train_subset["label"][:SUBSET_TRAIN_SIZE])
 
-
-print("Creating train / validation / test split...")
-
-split_dataset = dataset["train"].train_test_split(
-    test_size=0.10,
-    seed=SEED,
-    stratify_by_column="label",
+val_texts = [
+    str(x)
+    for x in train_subset["text"][
+        SUBSET_TRAIN_SIZE : SUBSET_TRAIN_SIZE + SUBSET_VAL_SIZE
+    ]
+]
+val_labels = list(
+    train_subset["label"][
+        SUBSET_TRAIN_SIZE : SUBSET_TRAIN_SIZE + SUBSET_VAL_SIZE
+    ]
 )
 
-train_data = split_dataset["train"]
-val_data = split_dataset["test"]
-test_data = dataset["test"]
+test_texts = [
+    str(x) for x in test_subset["text"]
+]
+test_labels = list(test_subset["label"])
 
-print(f"Train size: {len(train_data)}")
-print(f"Validation size: {len(val_data)}")
-print(f"Test size: {len(test_data)}")
+print(f"Training samples: {len(train_texts)}")
+print(f"Validation samples: {len(val_texts)}")
+print(f"Test samples: {len(test_texts)}")
 
-# 5. Tokenization
+print("Train label counts:", np.bincount(train_labels))
+print("Validation label counts:", np.bincount(val_labels))
+print("Test label counts:", np.bincount(test_labels))
 
-print(f"Loading tokenizer: {MODEL_NAME}")
+
+# =========================
+# 2. Tokenization
+# =========================
+
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
 
-def tokenize_function(examples):
+def tokenize_texts(texts):
     return tokenizer(
-        examples["text"],
-        padding="max_length",
+        texts,
         truncation=True,
+        padding="max_length",
         max_length=MAX_LENGTH,
     )
 
 
-print("Tokenizing datasets...")
-
-tokenized_train = train_data.map(
-    tokenize_function,
-    batched=True,
-    remove_columns=["text"],
-)
-
-tokenized_val = val_data.map(
-    tokenize_function,
-    batched=True,
-    remove_columns=["text"],
-)
-
-tokenized_test = test_data.map(
-    tokenize_function,
-    batched=True,
-    remove_columns=["text"],
-)
-
-tokenized_train = tokenized_train.rename_column("label", "labels")
-tokenized_val = tokenized_val.rename_column("label", "labels")
-tokenized_test = tokenized_test.rename_column("label", "labels")
-
-tokenized_train.set_format("torch")
-tokenized_val.set_format("torch")
-tokenized_test.set_format("torch")
+train_encodings = tokenize_texts(train_texts)
+val_encodings = tokenize_texts(val_texts)
+test_encodings = tokenize_texts(test_texts)
 
 
-# 6. Model and Trainer
+# =========================
+# 3. Dataset Class
+# =========================
+
+class IMDbBERTDataset(torch.utils.data.Dataset):
+    def __init__(self, encodings, labels):
+        self.encodings = encodings
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, index):
+        item = {
+            key: torch.tensor(value[index])
+            for key, value in self.encodings.items()
+        }
+        item["labels"] = torch.tensor(
+            self.labels[index],
+            dtype=torch.long,
+        )
+        return item
 
 
-print("\n" + "#" * 80)
-print(f"Running experiment: {EXPERIMENT_NAME}")
-print("#" * 80)
+train_dataset = IMDbBERTDataset(train_encodings, train_labels)
+val_dataset = IMDbBERTDataset(val_encodings, val_labels)
+test_dataset = IMDbBERTDataset(test_encodings, test_labels)
+
+
+# =========================
+# 4. Model
+# =========================
 
 model = AutoModelForSequenceClassification.from_pretrained(
     MODEL_NAME,
     num_labels=2,
 )
 
-output_dir = os.path.join(MODELS_DIR, safe_name(EXPERIMENT_NAME))
 
-training_args = build_training_args(output_dir=output_dir)
+# =========================
+# 5. Metrics for Trainer
+# =========================
+
+def compute_metrics(eval_pred):
+    logits, labels = eval_pred
+    preds = np.argmax(logits, axis=1)
+
+    result = evaluate_predictions(
+        y_true=labels,
+        y_pred=preds,
+        model_name="DistilBERT",
+        split_name="validation",
+        print_report=False,
+    )
+
+    return {
+        "accuracy": result["accuracy"],
+        "macro_f1": result["macro_f1"],
+    }
+
+
+# =========================
+# 6. Training
+# =========================
+
+output_dir = os.path.join(MODELS_DIR, "distilbert_imdb")
+
+training_args = TrainingArguments(
+    output_dir=output_dir,
+    num_train_epochs=NUM_EPOCHS,
+    per_device_train_batch_size=BATCH_SIZE,
+    per_device_eval_batch_size=BATCH_SIZE,
+    learning_rate=LEARNING_RATE,
+    weight_decay=0.01,
+    logging_dir=os.path.join(output_dir, "logs"),
+    logging_steps=20,
+    save_strategy="no",
+    eval_strategy="epoch",
+    report_to="none",
+    seed=SEED,
+)
 
 trainer = Trainer(
     model=model,
     args=training_args,
-    train_dataset=tokenized_train,
-    eval_dataset=tokenized_val,
+    train_dataset=train_dataset,
+    eval_dataset=val_dataset,
     compute_metrics=compute_metrics,
 )
 
-
-# 7. Fine-Tuning
-
-
-print("Fine-tuning DistilBERT...")
+print("Training DistilBERT...")
 trainer.train()
 
-print(f"Saving final model to {output_dir}")
+print("Saving DistilBERT model...")
 trainer.save_model(output_dir)
 tokenizer.save_pretrained(output_dir)
 
 
-# 8. Evaluation
+# =========================
+# 7. Final Evaluation
+# =========================
+
+all_results = []
+
+for split_name, texts, labels, eval_dataset in [
+    ("validation", val_texts, val_labels, val_dataset),
+    ("test", test_texts, test_labels, test_dataset),
+]:
+    print("\n" + "=" * 80)
+    print(f"Evaluating DistilBERT on {split_name} set")
+    print("=" * 80)
+
+    predictions = trainer.predict(eval_dataset)
+    logits = predictions.predictions
+    preds = np.argmax(logits, axis=1)
+
+    result = evaluate_predictions(
+        y_true=labels,
+        y_pred=preds,
+        model_name="DistilBERT",
+        split_name=split_name,
+    )
+
+    all_results.append(
+        {
+            "model": "DistilBERT",
+            "split": split_name,
+            "accuracy": result["accuracy"],
+            "macro_f1": result["macro_f1"],
+            "true_negative": result["true_negative"],
+            "false_positive": result["false_positive"],
+            "false_negative": result["false_negative"],
+            "true_positive": result["true_positive"],
+        }
+    )
+
+    save_predictions(
+        texts=texts,
+        labels=labels,
+        preds=preds,
+        output_path=os.path.join(
+            RESULTS_DIR,
+            f"bert_predictions_distilbert_fine_tuned_{split_name}.csv",
+        ),
+    )
+
+    save_confusion_matrix(
+        cm=result["confusion_matrix"],
+        model_name="DistilBERT",
+        split_name=split_name,
+        output_path=os.path.join(
+            FIGURES_DIR,
+            f"bert_confusion_matrix_distilbert_fine_tuned_{split_name}.png",
+        ),
+    )
 
 
-val_result = evaluate_and_save(
-    trainer=trainer,
-    tokenized_dataset=tokenized_val,
-    raw_texts=val_data["text"],
-    labels=val_data["label"],
-    experiment_name=EXPERIMENT_NAME,
-    split_name="validation",
-)
+# =========================
+# 8. Save Summary Results
+# =========================
 
-test_result = evaluate_and_save(
-    trainer=trainer,
-    tokenized_dataset=tokenized_test,
-    raw_texts=test_data["text"],
-    labels=test_data["label"],
-    experiment_name=EXPERIMENT_NAME,
-    split_name="test",
-)
-
-
-# 9. Save Summary Results
-
-
-results_df = pd.DataFrame([val_result, test_result])
-
+results_df = pd.DataFrame(all_results)
 results_path = os.path.join(RESULTS_DIR, "bert_results.csv")
 results_df.to_csv(results_path, index=False)
 
-print("\n" + "=" * 60)
-print("Final DistilBERT results")
-print("=" * 60)
-print(results_df.to_string(index=False))
-print(f"\nSaved BERT result summary to {results_path}")
-
-
-# 10. Summary for report
-
-
-test_row = results_df[results_df["split"] == "test"].iloc[0]
-
-print("\nReport-ready summary:")
-print(
-    f"The DistilBERT fine-tuning experiment used a {SUBSET_TRAIN_SIZE}-example "
-    f"training subset and a {SUBSET_TEST_SIZE}-example test subset due to CPU-only "
-    f"compute limitations. The model achieved {test_row['accuracy']:.4f} accuracy "
-    f"and {test_row['macro_f1']:.4f} macro-F1 on the IMDb test subset. "
-    f"This result will be compared against the full-dataset TF-IDF Logistic Regression "
-    f"baseline and lightweight CNN model, with the subset limitation clearly stated."
-)
+print("\nBERT results:")
+print(results_df)
+print(f"\nSaved BERT results to {results_path}")

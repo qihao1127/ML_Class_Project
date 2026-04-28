@@ -1,3 +1,0 @@
-model,split,loss,accuracy,macro_f1,true_negative,false_positive,false_negative,true_positive
-Lightweight CNN,validation,0.3569290027618408,0.8464,0.8456864541640545,1143,107,277,973
-Lightweight CNN,test,0.3563814520931244,0.84292,0.842402199440202,11253,1247,2680,9820

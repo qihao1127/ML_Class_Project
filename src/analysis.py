@@ -1,31 +1,13 @@
-"""
-analysis.py
-
-Final analysis script for IMDb sentiment classification capstone.
-
-This script combines results from:
-1. TF-IDF + Logistic Regression baseline
-2. Lightweight CNN
-3. DistilBERT fine-tuning
-
-It produces:
-- model comparison table
-- review length slice analysis
-- negation slice analysis
-- representative error examples
-- comparison figures
-"""
-
 import os
-import glob
+import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import accuracy_score, f1_score
 
-
-# 0. Folder Setup
+# =========================
+# 0. Settings
+# =========================
 
 RESULTS_DIR = "Results"
 FIGURES_DIR = "figures"
@@ -34,443 +16,402 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(FIGURES_DIR, exist_ok=True)
 
 
+# =========================
 # 1. Helper Functions
+# =========================
+
+def load_csv(path):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Missing file: {path}")
+    return pd.read_csv(path)
 
 
-def load_csv_if_exists(path):
-    if os.path.exists(path):
-        return pd.read_csv(path)
-    print(f"Warning: file not found: {path}")
-    return None
+def compute_accuracy(df):
+    return (df["true_label"] == df["predicted_label"]).mean()
 
 
-def find_bert_prediction_file():
-    """
-    Finds the DistilBERT test prediction CSV automatically.
-    """
-    pattern = os.path.join(RESULTS_DIR, "bert_predictions_*_test.csv")
-    files = glob.glob(pattern)
-
-    if len(files) == 0:
-        print("Warning: no BERT test prediction file found.")
-        return None
-
-    # Use the first BERT test prediction file found.
-    return files[0]
+def count_words(text):
+    return len(str(text).split())
 
 
-def add_text_features(df):
-    """
-    Adds review length and negation indicators.
-    """
-    df = df.copy()
+def contains_negation(text):
+    text = str(text).lower()
 
-    df["review_length"] = df["text"].astype(str).str.split().apply(len)
+    negation_patterns = [
+        r"\bnot\b",
+        r"\bno\b",
+        r"\bnever\b",
+        r"\bnothing\b",
+        r"\bnowhere\b",
+        r"\bneither\b",
+        r"\bnor\b",
+        r"\bcannot\b",
+        r"\bcan't\b",
+        r"\bdon't\b",
+        r"\bdidn't\b",
+        r"\bisn't\b",
+        r"\bwasn't\b",
+        r"\baren't\b",
+        r"\bweren't\b",
+        r"\bwon't\b",
+        r"\bwouldn't\b",
+        r"\bshouldn't\b",
+        r"\bcouldn't\b",
+        r"n't\b",
+    ]
 
-    df["has_negation"] = (
-        df["text"]
-        .astype(str)
-        .str.lower()
-        .str.contains(r"\bnot\b|\bnever\b|\bno\b|\bn't\b", regex=True)
-    )
-
-    return df
-
-
-def compute_basic_metrics(df, model_name, dataset_note):
-    y_true = df["true_label"]
-    y_pred = df["predicted_label"]
-
-    return {
-        "model": model_name,
-        "dataset_note": dataset_note,
-        "num_examples": len(df),
-        "accuracy": accuracy_score(y_true, y_pred),
-        "macro_f1": f1_score(y_true, y_pred, average="macro"),
-    }
+    return any(re.search(pattern, text) for pattern in negation_patterns)
 
 
-def compute_slice_metrics(df, model_name, dataset_note):
-    """
-    Computes accuracy and macro-F1 for:
-    - short reviews
-    - medium reviews
-    - long reviews
-    - negation reviews
-    - non-negation reviews
-    """
-
-    df = add_text_features(df)
-
-    q33 = df["review_length"].quantile(0.33)
-    q66 = df["review_length"].quantile(0.66)
-
-    slices = {
-        "short_reviews": df[df["review_length"] <= q33],
-        "medium_reviews": df[
-            (df["review_length"] > q33) &
-            (df["review_length"] <= q66)
-        ],
-        "long_reviews": df[df["review_length"] > q66],
-        "negation_reviews": df[df["has_negation"] == True],
-        "non_negation_reviews": df[df["has_negation"] == False],
-    }
-
-    rows = []
-
-    for slice_name, subset in slices.items():
-        if len(subset) == 0:
-            continue
-
-        rows.append({
-            "model": model_name,
-            "dataset_note": dataset_note,
-            "slice": slice_name,
-            "num_examples": len(subset),
-            "accuracy": accuracy_score(
-                subset["true_label"],
-                subset["predicted_label"]
-            ),
-            "macro_f1": f1_score(
-                subset["true_label"],
-                subset["predicted_label"],
-                average="macro"
-            ),
-            "avg_review_length": subset["review_length"].mean(),
-        })
-
-    return rows
-
-
-def collect_error_examples(df, model_name, dataset_note, max_examples=10):
-    """
-    Collect representative wrong predictions.
-    Prioritizes a mix of false positives and false negatives.
-    """
-
-    df = add_text_features(df)
-
-    errors = df[df["true_label"] != df["predicted_label"]].copy()
-
-    false_positive = errors[
-        (errors["true_label"] == 0) &
-        (errors["predicted_label"] == 1)
-    ].head(max_examples // 2)
-
-    false_negative = errors[
-        (errors["true_label"] == 1) &
-        (errors["predicted_label"] == 0)
-    ].head(max_examples // 2)
-
-    selected = pd.concat([false_positive, false_negative], axis=0)
-
-    rows = []
-
-    for _, row in selected.iterrows():
-        if row["true_label"] == 0 and row["predicted_label"] == 1:
-            error_type = "false_positive"
-        elif row["true_label"] == 1 and row["predicted_label"] == 0:
-            error_type = "false_negative"
-        else:
-            error_type = "other"
-
-        rows.append({
-            "model": model_name,
-            "dataset_note": dataset_note,
-            "error_type": error_type,
-            "true_label": row["true_label"],
-            "predicted_label": row["predicted_label"],
-            "review_length": row["review_length"],
-            "has_negation": row["has_negation"],
-            "text_excerpt": str(row["text"])[:800],
-        })
-
-    return rows
-
-
-def save_bar_chart(df, metric, output_path, title):
-    plt.figure(figsize=(9, 5))
-
-    plt.bar(df["model"], df[metric])
-
-    plt.ylabel(metric)
-    plt.xlabel("Model")
+def plot_bar(df, x_col, y_col, title, ylabel, output_path):
+    plt.figure(figsize=(8, 5))
+    plt.bar(df[x_col], df[y_col])
     plt.title(title)
-    plt.ylim(0, 1.0)
+    plt.ylabel(ylabel)
     plt.xticks(rotation=25, ha="right")
+    plt.ylim(0, 1.0)
     plt.tight_layout()
-
     plt.savefig(output_path, dpi=300)
     plt.close()
 
     print(f"Saved figure to {output_path}")
 
 
-def save_slice_chart(slice_df, slice_name, metric, output_path, title):
-    subset = slice_df[slice_df["slice"] == slice_name].copy()
+# =========================
+# 2. Model Comparison
+# =========================
 
-    if subset.empty:
-        print(f"Warning: no data for slice {slice_name}")
-        return
+print("Loading summary result files...")
 
-    plt.figure(figsize=(9, 5))
-
-    plt.bar(subset["model"], subset[metric])
-
-    plt.ylabel(metric)
-    plt.xlabel("Model")
-    plt.title(title)
-    plt.ylim(0, 1.0)
-    plt.xticks(rotation=25, ha="right")
-    plt.tight_layout()
-
-    plt.savefig(output_path, dpi=300)
-    plt.close()
-
-    print(f"Saved figure to {output_path}")
-
-
-# 2. Load Prediction Files
-
-
-print("Loading prediction files...")
-
-prediction_sets = []
-
-# Logistic Regression baseline
-logistic_path = os.path.join(
-    RESULTS_DIR,
-    "baseline_predictions_logistic_regression_test.csv"
+baseline_results = load_csv(
+    os.path.join(RESULTS_DIR, "baseline_results_subset_2000.csv")
 )
 
-logistic_df = load_csv_if_exists(logistic_path)
-
-if logistic_df is not None:
-    prediction_sets.append({
-        "model_name": "TF-IDF + Logistic Regression",
-        "dataset_note": "Full IMDb test set",
-        "df": logistic_df,
-    })
-
-
-# Naive Bayes baseline
-naive_bayes_path = os.path.join(
-    RESULTS_DIR,
-    "baseline_predictions_naive_bayes_test.csv"
+cnn_results = load_csv(
+    os.path.join(RESULTS_DIR, "cnn_results_subset_2000.csv")
 )
 
-naive_bayes_df = load_csv_if_exists(naive_bayes_path)
+# BERT file is still named bert_results.csv in your current code
+bert_results_path = os.path.join(RESULTS_DIR, "bert_results_subset_2000.csv")
 
-if naive_bayes_df is not None:
-    prediction_sets.append({
-        "model_name": "TF-IDF + Naive Bayes",
-        "dataset_note": "Full IMDb test set",
-        "df": naive_bayes_df,
-    })
-
-
-# CNN
-cnn_path = os.path.join(
-    RESULTS_DIR,
-    "cnn_predictions_test.csv"
-)
-
-cnn_df = load_csv_if_exists(cnn_path)
-
-if cnn_df is not None:
-    prediction_sets.append({
-        "model_name": "Lightweight CNN",
-        "dataset_note": "Full IMDb test set",
-        "df": cnn_df,
-    })
-
-
-# DistilBERT
-bert_path = find_bert_prediction_file()
-
-if bert_path is not None:
-    bert_df = load_csv_if_exists(bert_path)
-
-    if bert_df is not None:
-        prediction_sets.append({
-            "model_name": "DistilBERT",
-            "dataset_note": "5,000-example test subset",
-            "df": bert_df,
-        })
-
-
-if len(prediction_sets) == 0:
-    raise FileNotFoundError(
-        "No prediction files were found. Run train_baseline.py, "
-        "train_cnn.py, and train_bert.py first."
+if os.path.exists(bert_results_path):
+    bert_results = load_csv(bert_results_path)
+else:
+    bert_results = load_csv(
+        os.path.join(RESULTS_DIR, "bert_results.csv")
     )
 
+all_results = pd.concat(
+    [
+        baseline_results,
+        cnn_results,
+        bert_results,
+    ],
+    ignore_index=True,
+)
 
-# 3. Model Comparison Results
+test_results = all_results[all_results["split"] == "test"].copy()
 
-print("\nComputing model comparison results...")
+model_name_map = {
+    "Logistic Regression": "Logistic Regression",
+    "Naive Bayes": "Naive Bayes",
+    "CNN": "Lightweight CNN",
+    "DistilBERT": "DistilBERT",
+}
 
-comparison_rows = []
-
-for item in prediction_sets:
-    comparison_rows.append(
-        compute_basic_metrics(
-            df=item["df"],
-            model_name=item["model_name"],
-            dataset_note=item["dataset_note"],
-        )
-    )
-
-comparison_df = pd.DataFrame(comparison_rows)
+test_results["model_display"] = test_results["model"].map(model_name_map)
 
 comparison_path = os.path.join(
     RESULTS_DIR,
-    "model_comparison_results.csv"
+    "model_comparison_results_subset_2000.csv",
 )
 
-comparison_df.to_csv(comparison_path, index=False)
+test_results.to_csv(comparison_path, index=False)
 
 print("\nModel comparison results:")
-print(comparison_df.to_string(index=False))
+print(test_results)
 print(f"\nSaved model comparison results to {comparison_path}")
 
-# 4. Slice Analysis
 
-print("\nComputing slice analysis...")
-
-slice_rows = []
-
-for item in prediction_sets:
-    slice_rows.extend(
-        compute_slice_metrics(
-            df=item["df"],
-            model_name=item["model_name"],
-            dataset_note=item["dataset_note"],
-        )
-    )
-
-slice_df = pd.DataFrame(slice_rows)
-
-slice_path = os.path.join(
-    RESULTS_DIR,
-    "slice_results.csv"
+# Accuracy plot
+plot_bar(
+    df=test_results,
+    x_col="model_display",
+    y_col="accuracy",
+    title="Model Comparison on IMDb Test Set - Subset 2000",
+    ylabel="Test Accuracy",
+    output_path=os.path.join(
+        FIGURES_DIR,
+        "model_comparison_accuracy_subset_2000.png",
+    ),
 )
 
-slice_df.to_csv(slice_path, index=False)
+# Macro-F1 plot
+plot_bar(
+    df=test_results,
+    x_col="model_display",
+    y_col="macro_f1",
+    title="Model Comparison on IMDb Test Set - Subset 2000",
+    ylabel="Test Macro-F1",
+    output_path=os.path.join(
+        FIGURES_DIR,
+        "model_comparison_macro_f1_subset_2000.png",
+    ),
+)
 
-print("\nSlice analysis results:")
-print(slice_df.to_string(index=False))
-print(f"\nSaved slice results to {slice_path}")
+
+# =========================
+# 3. Load Prediction Files
+# =========================
+
+print("\nLoading prediction files...")
+
+prediction_files = {
+    "Logistic Regression": os.path.join(
+        RESULTS_DIR,
+        "baseline_predictions_logistic_regression_subset_2000_test.csv",
+    ),
+    "Naive Bayes": os.path.join(
+        RESULTS_DIR,
+        "baseline_predictions_naive_bayes_subset_2000_test.csv",
+    ),
+    "Lightweight CNN": os.path.join(
+        RESULTS_DIR,
+        "cnn_predictions_subset_2000_test.csv",
+    ),
+    "DistilBERT": os.path.join(
+        RESULTS_DIR,
+        "bert_predictions_distilbert_fine_tuned_test.csv",
+    ),
+}
+
+prediction_dfs = {}
+
+for model_name, path in prediction_files.items():
+    df = load_csv(path)
+    prediction_dfs[model_name] = df
+    print(f"{model_name}: {len(df)} test examples")
 
 
-# 5. Error Examples
+# =========================
+# 4. Length Slice Analysis
+# =========================
 
-print("\nCollecting error examples...")
+print("\nRunning length slice analysis...")
+
+length_rows = []
+
+for model_name, df in prediction_dfs.items():
+    df = df.copy()
+    df["review_length"] = df["text"].apply(count_words)
+
+    df["length_group"] = pd.cut(
+        df["review_length"],
+        bins=[0, 100, 250, 500, np.inf],
+        labels=[
+            "short_0_100",
+            "medium_101_250",
+            "long_251_500",
+            "very_long_500_plus",
+        ],
+        include_lowest=True,
+    )
+
+    for group_name, group_df in df.groupby("length_group", observed=False):
+        if len(group_df) == 0:
+            continue
+
+        length_rows.append(
+            {
+                "model": model_name,
+                "slice_type": "review_length",
+                "slice_name": str(group_name),
+                "num_examples": len(group_df),
+                "accuracy": compute_accuracy(group_df),
+            }
+        )
+
+length_slice_df = pd.DataFrame(length_rows)
+
+length_slice_path = os.path.join(
+    RESULTS_DIR,
+    "length_slice_results_subset_2000.csv",
+)
+
+length_slice_df.to_csv(length_slice_path, index=False)
+
+print("\nLength slice results:")
+print(length_slice_df)
+print(f"\nSaved length slice results to {length_slice_path}")
+
+
+# Plot length slice
+plt.figure(figsize=(10, 6))
+
+for model_name in length_slice_df["model"].unique():
+    model_df = length_slice_df[length_slice_df["model"] == model_name]
+    plt.plot(
+        model_df["slice_name"],
+        model_df["accuracy"],
+        marker="o",
+        label=model_name,
+    )
+
+plt.title("Accuracy by Review Length - Subset 2000")
+plt.xlabel("Review Length Group")
+plt.ylabel("Accuracy")
+plt.ylim(0, 1.0)
+plt.xticks(rotation=25, ha="right")
+plt.legend()
+plt.tight_layout()
+
+length_plot_path = os.path.join(
+    FIGURES_DIR,
+    "length_slice_accuracy_subset_2000.png",
+)
+
+plt.savefig(length_plot_path, dpi=300)
+plt.close()
+
+print(f"Saved figure to {length_plot_path}")
+
+
+# =========================
+# 5. Negation Slice Analysis
+# =========================
+
+print("\nRunning negation slice analysis...")
+
+negation_rows = []
+
+for model_name, df in prediction_dfs.items():
+    df = df.copy()
+    df["contains_negation"] = df["text"].apply(contains_negation)
+
+    for slice_value, group_df in df.groupby("contains_negation"):
+        slice_name = (
+            "contains_negation"
+            if slice_value
+            else "no_negation"
+        )
+
+        negation_rows.append(
+            {
+                "model": model_name,
+                "slice_type": "negation",
+                "slice_name": slice_name,
+                "num_examples": len(group_df),
+                "accuracy": compute_accuracy(group_df),
+            }
+        )
+
+negation_slice_df = pd.DataFrame(negation_rows)
+
+negation_slice_path = os.path.join(
+    RESULTS_DIR,
+    "negation_slice_results_subset_2000.csv",
+)
+
+negation_slice_df.to_csv(negation_slice_path, index=False)
+
+print("\nNegation slice results:")
+print(negation_slice_df)
+print(f"\nSaved negation slice results to {negation_slice_path}")
+
+
+# Plot negation slice
+plt.figure(figsize=(8, 5))
+
+for model_name in negation_slice_df["model"].unique():
+    model_df = negation_slice_df[
+        negation_slice_df["model"] == model_name
+    ]
+
+    plt.plot(
+        model_df["slice_name"],
+        model_df["accuracy"],
+        marker="o",
+        label=model_name,
+    )
+
+plt.title("Accuracy on Negation Slice - Subset 2000")
+plt.xlabel("Slice")
+plt.ylabel("Accuracy")
+plt.ylim(0, 1.0)
+plt.legend()
+plt.tight_layout()
+
+negation_plot_path = os.path.join(
+    FIGURES_DIR,
+    "negation_slice_accuracy_subset_2000.png",
+)
+
+plt.savefig(negation_plot_path, dpi=300)
+plt.close()
+
+print(f"Saved figure to {negation_plot_path}")
+
+
+# =========================
+# 6. Combined Slice Results
+# =========================
+
+slice_results = pd.concat(
+    [
+        length_slice_df,
+        negation_slice_df,
+    ],
+    ignore_index=True,
+)
+
+slice_results_path = os.path.join(
+    RESULTS_DIR,
+    "slice_results_subset_2000.csv",
+)
+
+slice_results.to_csv(slice_results_path, index=False)
+
+print(f"\nSaved combined slice results to {slice_results_path}")
+
+
+# =========================
+# 7. Error Examples
+# =========================
+
+print("\nSaving error examples...")
 
 error_rows = []
 
-for item in prediction_sets:
-    error_rows.extend(
-        collect_error_examples(
-            df=item["df"],
-            model_name=item["model_name"],
-            dataset_note=item["dataset_note"],
-            max_examples=10,
+for model_name, df in prediction_dfs.items():
+    df = df.copy()
+    df["correct"] = df["true_label"] == df["predicted_label"]
+
+    errors = df[df["correct"] == False].head(10)
+
+    for _, row in errors.iterrows():
+        error_rows.append(
+            {
+                "model": model_name,
+                "true_label": row["true_label"],
+                "predicted_label": row["predicted_label"],
+                "text": row["text"],
+            }
         )
-    )
 
-error_df = pd.DataFrame(error_rows)
+error_examples_df = pd.DataFrame(error_rows)
 
-error_path = os.path.join(
+error_examples_path = os.path.join(
     RESULTS_DIR,
-    "error_examples.csv"
+    "error_examples_subset_2000.csv",
 )
 
-error_df.to_csv(error_path, index=False)
+error_examples_df.to_csv(error_examples_path, index=False)
 
-print(f"Saved representative error examples to {error_path}")
-
-
-# 6. Figures
-
-print("\nGenerating figures...")
-
-accuracy_fig_path = os.path.join(
-    FIGURES_DIR,
-    "model_comparison_accuracy.png"
-)
-
-macro_f1_fig_path = os.path.join(
-    FIGURES_DIR,
-    "model_comparison_macro_f1.png"
-)
-
-save_bar_chart(
-    df=comparison_df,
-    metric="accuracy",
-    output_path=accuracy_fig_path,
-    title="IMDb Sentiment Classification Accuracy Comparison"
-)
-
-save_bar_chart(
-    df=comparison_df,
-    metric="macro_f1",
-    output_path=macro_f1_fig_path,
-    title="IMDb Sentiment Classification Macro-F1 Comparison"
-)
+print(f"Saved error examples to {error_examples_path}")
 
 
-length_fig_path = os.path.join(
-    FIGURES_DIR,
-    "length_slice_accuracy.png"
-)
+# =========================
+# 8. Done
+# =========================
 
-negation_fig_path = os.path.join(
-    FIGURES_DIR,
-    "negation_slice_accuracy.png"
-)
-
-save_slice_chart(
-    slice_df=slice_df,
-    slice_name="long_reviews",
-    metric="accuracy",
-    output_path=length_fig_path,
-    title="Accuracy on Long Review Slice"
-)
-
-save_slice_chart(
-    slice_df=slice_df,
-    slice_name="negation_reviews",
-    metric="accuracy",
-    output_path=negation_fig_path,
-    title="Accuracy on Negation Review Slice"
-)
-
-
-# 7. Summary for report
-
-print("\n" + "=" * 60)
-print("Report-ready summary")
-print("=" * 60)
-
-best_row = comparison_df.sort_values(by="macro_f1", ascending=False).iloc[0]
-
-print(
-    f"The best overall result in this analysis was achieved by "
-    f"{best_row['model']}, with {best_row['accuracy']:.4f} accuracy "
-    f"and {best_row['macro_f1']:.4f} macro-F1. "
-)
-
-print(
-    "The TF-IDF and CNN models were evaluated on the full IMDb test set. "
-    "The DistilBERT result was evaluated on a 5,000-example test subset due "
-    "to CPU-only compute limitations, so it should be interpreted as a "
-    "compute-limited transformer comparison rather than a fully controlled "
-    "full-dataset comparison."
-)
-
-print(
-    "Slice analysis results were saved for review-length groups and negation "
-    "reviews. Representative false-positive and false-negative examples were "
-    "also saved for qualitative error analysis."
-)
+print("\nAnalysis complete.")

@@ -1,0 +1,25 @@
+model,slice_type,slice_name,num_examples,accuracy
+Logistic Regression,review_length,short_0_100,132,0.8181818181818182
+Logistic Regression,review_length,medium_101_250,600,0.8066666666666666
+Logistic Regression,review_length,long_251_500,204,0.8627450980392157
+Logistic Regression,review_length,very_long_500_plus,64,0.828125
+Naive Bayes,review_length,short_0_100,132,0.8181818181818182
+Naive Bayes,review_length,medium_101_250,600,0.8083333333333333
+Naive Bayes,review_length,long_251_500,204,0.8480392156862745
+Naive Bayes,review_length,very_long_500_plus,64,0.8125
+Lightweight CNN,review_length,short_0_100,132,0.7348484848484849
+Lightweight CNN,review_length,medium_101_250,600,0.7233333333333334
+Lightweight CNN,review_length,long_251_500,204,0.7303921568627451
+Lightweight CNN,review_length,very_long_500_plus,64,0.640625
+DistilBERT,review_length,short_0_100,132,0.8863636363636364
+DistilBERT,review_length,medium_101_250,600,0.835
+DistilBERT,review_length,long_251_500,204,0.8333333333333334
+DistilBERT,review_length,very_long_500_plus,64,0.71875
+Logistic Regression,negation,no_negation,118,0.8898305084745762
+Logistic Regression,negation,contains_negation,882,0.8117913832199547
+Naive Bayes,negation,no_negation,118,0.8728813559322034
+Naive Bayes,negation,contains_negation,882,0.8106575963718821
+Lightweight CNN,negation,no_negation,118,0.7711864406779662
+Lightweight CNN,negation,contains_negation,882,0.7142857142857143
+DistilBERT,negation,no_negation,118,0.8898305084745762
+DistilBERT,negation,contains_negation,882,0.826530612244898

@@ -1,0 +1,5 @@
+model,split,accuracy,macro_f1,true_negative,false_positive,false_negative,true_positive
+Logistic Regression,validation,0.816,0.8157612265496084,195,48,44,213
+Logistic Regression,test,0.821,0.8209912285701999,414,98,81,407
+Naive Bayes,validation,0.808,0.808,202,41,55,202
+Naive Bayes,test,0.818,0.8169426608088317,447,65,117,371

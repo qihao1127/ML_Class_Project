@@ -1,0 +1,9 @@
+model,slice_type,slice_name,num_examples,accuracy
+Logistic Regression,negation,no_negation,118,0.8898305084745762
+Logistic Regression,negation,contains_negation,882,0.8117913832199547
+Naive Bayes,negation,no_negation,118,0.8728813559322034
+Naive Bayes,negation,contains_negation,882,0.8106575963718821
+Lightweight CNN,negation,no_negation,118,0.7711864406779662
+Lightweight CNN,negation,contains_negation,882,0.7142857142857143
+DistilBERT,negation,no_negation,118,0.8898305084745762
+DistilBERT,negation,contains_negation,882,0.826530612244898

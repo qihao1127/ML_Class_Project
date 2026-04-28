@@ -1,0 +1,5 @@
+model,split,accuracy,macro_f1,true_negative,false_positive,false_negative,true_positive,model_display
+Logistic Regression,test,0.821,0.8209912285701999,414,98,81,407,Logistic Regression
+Naive Bayes,test,0.818,0.8169426608088317,447,65,117,371,Naive Bayes
+CNN,test,0.721,0.7205302112851704,340,172,107,381,Lightweight CNN
+DistilBERT,test,0.834,0.8339760925573283,423,89,77,411,DistilBERT
