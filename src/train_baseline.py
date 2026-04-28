@@ -36,9 +36,7 @@ from sklearn.metrics import (
 )
 
 
-# ============================================================
 # 0. Basic Setup
-# ============================================================
 
 SEED = 42
 
@@ -51,16 +49,12 @@ FIGURES_DIR = "figures"
 os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(FIGURES_DIR, exist_ok=True)
 
-
-# ============================================================
 # 1. Load Dataset
-# ============================================================
 
 print("Loading IMDb dataset...")
 dataset = load_dataset("imdb")
 
-# Set this to True only for quick debugging.
-USE_SUBSET = False
+USE_SUBSET = False # Set to True for debugging.
 
 if USE_SUBSET:
     print("Using subset for quick test...")
@@ -68,11 +62,7 @@ if USE_SUBSET:
     dataset["test"] = dataset["test"].shuffle(seed=SEED).select(range(1000))
 
 
-# ============================================================
 # 2. Train / Validation / Test Split
-# ============================================================
-# IMDb has official train and test sets.
-# We split 10% of the training data as validation.
 
 print("Creating train / validation / test split...")
 
@@ -99,10 +89,7 @@ print(f"Train size: {len(train_texts)}")
 print(f"Validation size: {len(val_texts)}")
 print(f"Test size: {len(test_texts)}")
 
-
-# ============================================================
 # 3. TF-IDF Vectorization
-# ============================================================
 
 print("Building TF-IDF features...")
 
@@ -120,10 +107,7 @@ X_test = vectorizer.transform(test_texts)
 
 print(f"TF-IDF feature shape: {X_train.shape}")
 
-
-# ============================================================
-# 4. Evaluation Function
-# ============================================================
+# 4. Evaluation
 
 def evaluate_model(model_name, model, X, y, texts, split_name):
     preds = model.predict(X)
@@ -195,10 +179,7 @@ def evaluate_model(model_name, model, X, y, texts, split_name):
         "true_positive": cm[1, 1],
     }
 
-
-# ============================================================
 # 5. Model 1: Logistic Regression
-# ============================================================
 
 print("\nTraining Logistic Regression baseline...")
 
@@ -229,10 +210,7 @@ log_reg_test_result = evaluate_model(
     split_name="test"
 )
 
-
-# ============================================================
 # 6. Model 2: Naive Bayes
-# ============================================================
 
 print("\nTraining Naive Bayes baseline...")
 
@@ -258,10 +236,7 @@ nb_test_result = evaluate_model(
     split_name="test"
 )
 
-
-# ============================================================
-# 7. Save Summary Results
-# ============================================================
+# 7. Save Results
 
 results = [
     log_reg_val_result,
@@ -281,10 +256,7 @@ print("=" * 60)
 print(results_df.to_string(index=False))
 print(f"\nSaved result summary to {results_path}")
 
-
-# ============================================================
-# 8. Report-Ready Summary
-# ============================================================
+# 8. Summary for report
 
 test_results = results_df[results_df["split"] == "test"]
 best_model = test_results.sort_values(by="macro_f1", ascending=False).iloc[0]

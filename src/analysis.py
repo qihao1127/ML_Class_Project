@@ -25,20 +25,17 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score
 
 
-# ============================================================
 # 0. Folder Setup
-# ============================================================
 
-RESULTS_DIR = "results"
+RESULTS_DIR = "Results"
 FIGURES_DIR = "figures"
 
 os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(FIGURES_DIR, exist_ok=True)
 
 
-# ============================================================
 # 1. Helper Functions
-# ============================================================
+
 
 def load_csv_if_exists(path):
     if os.path.exists(path):
@@ -233,9 +230,8 @@ def save_slice_chart(slice_df, slice_name, metric, output_path, title):
     print(f"Saved figure to {output_path}")
 
 
-# ============================================================
 # 2. Load Prediction Files
-# ============================================================
+
 
 print("Loading prediction files...")
 
@@ -310,9 +306,7 @@ if len(prediction_sets) == 0:
     )
 
 
-# ============================================================
 # 3. Model Comparison Results
-# ============================================================
 
 print("\nComputing model comparison results...")
 
@@ -340,10 +334,7 @@ print("\nModel comparison results:")
 print(comparison_df.to_string(index=False))
 print(f"\nSaved model comparison results to {comparison_path}")
 
-
-# ============================================================
 # 4. Slice Analysis
-# ============================================================
 
 print("\nComputing slice analysis...")
 
@@ -372,9 +363,7 @@ print(slice_df.to_string(index=False))
 print(f"\nSaved slice results to {slice_path}")
 
 
-# ============================================================
 # 5. Error Examples
-# ============================================================
 
 print("\nCollecting error examples...")
 
@@ -402,9 +391,7 @@ error_df.to_csv(error_path, index=False)
 print(f"Saved representative error examples to {error_path}")
 
 
-# ============================================================
 # 6. Figures
-# ============================================================
 
 print("\nGenerating figures...")
 
@@ -460,9 +447,7 @@ save_slice_chart(
 )
 
 
-# ============================================================
-# 7. Report-Ready Summary
-# ============================================================
+# 7. Summary for report
 
 print("\n" + "=" * 60)
 print("Report-ready summary")

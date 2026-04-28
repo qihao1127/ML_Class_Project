@@ -38,10 +38,7 @@ from sklearn.metrics import (
     classification_report,
 )
 
-
-# ============================================================
 # 0. Basic Setup
-# ============================================================
 
 SEED = 42
 
@@ -64,10 +61,7 @@ print(f"Using device: {device}")
 if device.type == "cuda":
     print(f"GPU: {torch.cuda.get_device_name(0)}")
 
-
-# ============================================================
 # 1. Hyperparameters
-# ============================================================
 
 USE_SUBSET = False
 
@@ -84,10 +78,7 @@ NUM_EPOCHS = 5
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-5
 
-
-# ============================================================
 # 2. Text Processing
-# ============================================================
 
 def clean_text(text):
     text = text.lower()
@@ -132,9 +123,7 @@ def encode_text(text, vocab, max_length):
     return ids
 
 
-# ============================================================
 # 3. Dataset Class
-# ============================================================
 
 class IMDbCNNDataset(Dataset):
     def __init__(self, texts, labels, vocab, max_length):
@@ -159,9 +148,7 @@ class IMDbCNNDataset(Dataset):
         }
 
 
-# ============================================================
 # 4. CNN Model
-# ============================================================
 
 class LightweightCNN(nn.Module):
     def __init__(
@@ -208,10 +195,7 @@ class LightweightCNN(nn.Module):
 
         return logits
 
-
-# ============================================================
 # 5. Evaluation Function
-# ============================================================
 
 def evaluate_model(model, dataloader, split_name):
     model.eval()
@@ -312,9 +296,7 @@ def save_confusion_matrix(cm, split_name):
     print(f"Saved confusion matrix to {fig_path}")
 
 
-# ============================================================
 # 6. Load IMDb Dataset
-# ============================================================
 
 print("Loading IMDb dataset...")
 dataset = load_dataset("imdb")
@@ -324,10 +306,7 @@ if USE_SUBSET:
     dataset["train"] = dataset["train"].shuffle(seed=SEED).select(range(3000))
     dataset["test"] = dataset["test"].shuffle(seed=SEED).select(range(1000))
 
-
-# ============================================================
 # 7. Train / Validation / Test Split
-# ============================================================
 
 print("Creating train / validation / test split...")
 
@@ -355,9 +334,7 @@ print(f"Validation size: {len(val_texts)}")
 print(f"Test size: {len(test_texts)}")
 
 
-# ============================================================
 # 8. Build Vocabulary
-# ============================================================
 
 print("Building vocabulary from training data...")
 
@@ -367,9 +344,8 @@ vocab_size = len(vocab)
 print(f"Vocabulary size: {vocab_size}")
 
 
-# ============================================================
+
 # 9. Build Datasets and Dataloaders
-# ============================================================
 
 train_dataset = IMDbCNNDataset(
     train_texts,
@@ -410,10 +386,7 @@ test_loader = DataLoader(
     shuffle=False
 )
 
-
-# ============================================================
 # 10. Initialize Model
-# ============================================================
 
 model = LightweightCNN(
     vocab_size=vocab_size,
@@ -431,10 +404,7 @@ optimizer = torch.optim.Adam(
     weight_decay=WEIGHT_DECAY
 )
 
-
-# ============================================================
 # 11. Training Loop
-# ============================================================
 
 print("\nTraining CNN model...")
 
@@ -500,10 +470,7 @@ for epoch in range(1, NUM_EPOCHS + 1):
 
         print(f"Saved best CNN model to {best_model_path}")
 
-
-# ============================================================
 # 12. Load Best Model and Evaluate on Test Set
-# ============================================================
 
 print("\nLoading best CNN model for final test evaluation...")
 
@@ -523,9 +490,7 @@ test_result = evaluate_model(
 )
 
 
-# ============================================================
 # 13. Save Results
-# ============================================================
 
 save_predictions(
     texts=val_texts,
@@ -585,10 +550,7 @@ print("=" * 60)
 print(results_df.to_string(index=False))
 print(f"\nSaved CNN result summary to {results_path}")
 
-
-# ============================================================
-# 14. Report-Ready Summary
-# ============================================================
+# 14. Summary for report
 
 test_row = results_df[results_df["split"] == "test"].iloc[0]
 

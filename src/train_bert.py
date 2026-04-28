@@ -1,9 +1,7 @@
 """
 train_bert.py
 
-CPU-friendly DistilBERT fine-tuning experiment for IMDb sentiment classification.
-
-This script uses a subset of IMDb because full BERT training on CPU is very slow.
+DistilBERT fine-tuning experiment for IMDb sentiment classification.(Using DistilBERT fine-tuning for speed)
 
 Model:
 - DistilBERT fine-tuned on IMDb sentiment classification
@@ -42,10 +40,7 @@ from sklearn.metrics import (
     classification_report,
 )
 
-
-# ============================================================
 # 0. Basic Setup
-# ============================================================
 
 SEED = 42
 
@@ -73,9 +68,7 @@ else:
     print("Running on CPU. DistilBERT + subset mode is used for feasibility.")
 
 
-# ============================================================
 # 1. Experiment Settings
-# ============================================================
 
 MODEL_NAME = "distilbert-base-uncased"
 
@@ -91,9 +84,7 @@ LEARNING_RATE = 2e-5
 NUM_EPOCHS = 2
 
 
-# ============================================================
 # 2. Helper Functions
-# ============================================================
 
 def safe_name(name):
     return (
@@ -243,9 +234,7 @@ def evaluate_and_save(trainer, tokenized_dataset, raw_texts, labels, experiment_
     }
 
 
-# ============================================================
 # 3. Load IMDb Dataset
-# ============================================================
 
 print("Loading IMDb dataset...")
 dataset = load_dataset("imdb")
@@ -255,10 +244,8 @@ if USE_SUBSET:
     dataset["train"] = dataset["train"].shuffle(seed=SEED).select(range(SUBSET_TRAIN_SIZE))
     dataset["test"] = dataset["test"].shuffle(seed=SEED).select(range(SUBSET_TEST_SIZE))
 
-
-# ============================================================
 # 4. Train / Validation / Test Split
-# ============================================================
+
 
 print("Creating train / validation / test split...")
 
@@ -276,10 +263,7 @@ print(f"Train size: {len(train_data)}")
 print(f"Validation size: {len(val_data)}")
 print(f"Test size: {len(test_data)}")
 
-
-# ============================================================
 # 5. Tokenization
-# ============================================================
 
 print(f"Loading tokenizer: {MODEL_NAME}")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -323,9 +307,8 @@ tokenized_val.set_format("torch")
 tokenized_test.set_format("torch")
 
 
-# ============================================================
 # 6. Model and Trainer
-# ============================================================
+
 
 print("\n" + "#" * 80)
 print(f"Running experiment: {EXPERIMENT_NAME}")
@@ -349,9 +332,8 @@ trainer = Trainer(
 )
 
 
-# ============================================================
 # 7. Fine-Tuning
-# ============================================================
+
 
 print("Fine-tuning DistilBERT...")
 trainer.train()
@@ -361,9 +343,8 @@ trainer.save_model(output_dir)
 tokenizer.save_pretrained(output_dir)
 
 
-# ============================================================
 # 8. Evaluation
-# ============================================================
+
 
 val_result = evaluate_and_save(
     trainer=trainer,
@@ -384,9 +365,8 @@ test_result = evaluate_and_save(
 )
 
 
-# ============================================================
 # 9. Save Summary Results
-# ============================================================
+
 
 results_df = pd.DataFrame([val_result, test_result])
 
@@ -400,9 +380,8 @@ print(results_df.to_string(index=False))
 print(f"\nSaved BERT result summary to {results_path}")
 
 
-# ============================================================
-# 10. Report-Ready Summary
-# ============================================================
+# 10. Summary for report
+
 
 test_row = results_df[results_df["split"] == "test"].iloc[0]
 
