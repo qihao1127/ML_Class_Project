@@ -1,0 +1,3 @@
+model,base_model,split,train_subset_size,test_subset_size,max_length,batch_size,epochs,learning_rate,accuracy,macro_f1,true_negative,false_positive,false_negative,true_positive
+DistilBERT Fine Tuned LR 2e-5 Epochs 2,distilbert-base-uncased,validation,5000,5000,128,16,2,2e-05,0.84,0.8399077868852459,204,45,35,216
+DistilBERT Fine Tuned LR 2e-5 Epochs 2,distilbert-base-uncased,test,5000,5000,128,16,2,2e-05,0.8528,0.8525960164714338,2039,455,281,2225
