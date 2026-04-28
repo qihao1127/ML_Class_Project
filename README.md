@@ -1,15 +1,25 @@
-# Advanced Machine Learning Class Project Qihao Yang 
-## IMDb Sentiment Classification
-## Overview
+# Advanced Machine Learning Class Project
 
-This project compares four models for IMDb movie review sentiment classification:
+This project compares four models for IMDb sentiment classification:
 
 1. TF-IDF + Logistic Regression
 2. TF-IDF + Naive Bayes
 3. Lightweight CNN
 4. DistilBERT
 
-The task is to predict whether a review is positive or negative.
+The task is to predict whether a movie review is positive or negative.
+
+## Dataset and Setup
+
+All models use the same IMDb subset for a fair comparison:
+
+| Split | Number of Examples |
+|---|---:|
+| Training | 2,000 |
+| Validation | 500 |
+| Test | 1,000 |
+
+The dataset is shuffled with a fixed random seed before subsetting.
 
 ## How to Run
 
@@ -23,25 +33,31 @@ python src/analysis.py
 ```
 ## Results
 
-| Model | Test Set | Accuracy | Macro-F1 |
-|---|---|---:|---:|
-| TF-IDF + Logistic Regression | Full IMDb test set | 0.8804 | 0.8804 |
-| TF-IDF + Naive Bayes | Full IMDb test set | 0.8510 | 0.8509 |
-| Lightweight CNN | Full IMDb test set | 0.8429 | 0.8424 |
-| DistilBERT | 5,000-example subset | 0.8528 | 0.8526 |
+| Model | Accuracy | Macro-F1 |
+|---|---:|---:|
+| TF-IDF + Logistic Regression | 0.821 | 0.821 |
+| TF-IDF + Naive Bayes | 0.818 | 0.817 |
+| Lightweight CNN | 0.721 | 0.721 |
+| DistilBERT | 0.834 | 0.834 |
 
-The best full-dataset model was TF-IDF + Logistic Regression.
+All models were evaluated on the same 1,000-example test subset. DistilBERT had the best result, while Logistic Regression and Naive Bayes were also strong baselines. The CNN had lower performance because it was trained from scratch on a small dataset.
 
 ## Files
 
-- `src/train_baseline.py`: trains Logistic Regression and Naive Bayes
+- `src/train_baseline.py`: trains the TF-IDF baseline models
 - `src/train_cnn.py`: trains the CNN model
 - `src/train_bert.py`: trains DistilBERT
-- `src/analysis.py`: generates final comparison results and figures
+- `src/analysis.py`: generates result tables and figures
+- `src/utils.py`: contains shared helper functions
 
-Results are saved in `results/`.  
+## Outputs
+
+Results are saved in `Results/`.
+
 Figures are saved in `figures/`.
+
+The main generated files include model comparison results, slice analysis results, error examples, and comparison figures.
 
 ## Note
 
-DistilBERT was trained on a smaller subset for speed.
+All models were trained using the same 2,000-example training subset and tested on the same 1,000-example test subset.
